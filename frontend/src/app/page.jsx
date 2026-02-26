@@ -26,7 +26,7 @@ export default function Home() {
         </div>
         <h1 className="page-title mb-3">Welcome back</h1>
         <p className="mb-10 max-w-md text-muted">
-          Browse books, borrow and return, leave reviews, and get personalized recommendations.
+          Browse books, borrow & return, leave reviews, and get personalized recommendations.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <Link href="/books" className="btn-primary inline-flex items-center gap-2">
