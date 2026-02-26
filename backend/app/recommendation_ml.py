@@ -61,7 +61,7 @@ def similar_books(books, book_id, limit=10):
     # Calculate similarity
     similarity = cosine_similarity(matrix[index:index+1], matrix).flatten()
 
-    # Sort by similarity (highest first)
+    # Sort by highest first
     sorted_indexes = similarity.argsort()[::-1]
 
     results = []

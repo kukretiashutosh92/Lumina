@@ -115,7 +115,7 @@ class MyReviewResponse(BaseModel):
 
 # =========================
 # Preferences
-# =========================
+
 
 class PreferenceCreate(BaseModel):
     genre: str
