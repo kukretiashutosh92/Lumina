@@ -1,98 +1,175 @@
-From the **project root** (directory containing `docker-compose.yml`).
+Docker Guide – LuminaLib
+All commands must be executed from the project root directory (the folder containing docker-compose.yml).
 
-## Start everything
+Prerequisites
+Make sure the following are installed:
+•	Docker (v24+ recommended)
+•	Docker Compose (v2+ recommended)
+•	Minimum 4GB RAM available for Docker (recommended for Ollama)
+Verify installation:
+docker --version
+docker compose version
 
-```bash
+Services Overview
+When running the stack, the following services start:
+Service	Description	Host Port
+frontend	Next.js React frontend	3000
+api	FastAPI backend	8000
+db	PostgreSQL database	5433
+ollama	Local LLM service	11434
+
+Start Everything
 docker compose up --build
-```
+This will:
+•	Build images (if not already built)
+•	Start all services
+•	Automatically run database migrations (alembic upgrade head)
+•	Start API and frontend
+Access the services:
+Frontend:
+http://localhost:3000
+API:
+http://localhost:8000
+API Docs:
+http://localhost:8000/docs
+PostgreSQL:
+Host: localhost
+Port: 5433
+User: luminalib
+Password: luminalib
+Database: luminalib
 
-- **Frontend:** http://localhost:3000  
-- **API:** http://localhost:8000  
-- **PostgreSQL:** localhost:5433 (user `luminalib`, password `luminalib`, db `luminalib`)
-
-Migrations run automatically on API startup (`alembic upgrade head`).
-
-## Run in background
-
-```bash
+Run in Background (Detached Mode)
 docker compose up --build -d
-```
+Containers will run in the background.
 
-## View logs
-
-```bash
+View Logs
+View logs for all services:
 docker compose logs -f
-```
-
-Single service:
-
-```bash
+View logs for a specific service:
 docker compose logs -f api
 docker compose logs -f frontend
 docker compose logs -f db
-```
+docker compose logs -f ollama
 
-## Stop
-
-```bash
+Stop Services
 docker compose down
-```
+This stops containers but keeps volumes (database + Ollama models).
 
-## Stop and remove volumes (fresh DB)
-
-```bash
+Stop and Remove Everything (Fresh Start)
 docker compose down -v
-```
-
-Then `docker compose up --build` for a clean start.
-
-## Rebuild after code changes
-
-```bash
+This removes:
+•	Database data
+•	Ollama model cache
+•	All volumes
+Start fresh again:
 docker compose up --build
-```
 
-Or rebuild a single service:
-
-```bash
+Rebuild After Code Changes
+If backend or frontend code changes:
+docker compose up --build
+Rebuild only one service:
 docker compose up --build api
 docker compose up --build frontend
-```
 
-## Ollama (book summaries, review consensus, AI suggestions)
+Database Behavior
+•	Migrations run automatically when the API starts.
+•	If you run docker compose down -v, the database will reset.
+•	Internal PostgreSQL port: 5432
+•	Exposed host port: 5433
+Connect using any DB client:
+Host: localhost
+Port: 5433
+User: luminalib
+Password: luminalib
+Database: luminalib
 
-The stack runs **Ollama in Docker** so the API can reach it without host config. No need to install or run Ollama on your machine.
+Ollama (AI Features)
+The stack runs Ollama inside Docker, so no host installation is required.
+This avoids:
+•	Host networking issues
+•	Snap configuration problems
+•	OLLAMA_HOST binding issues
+•	Firewall configuration problems
 
-1. Start the stack (one command):
-   ```bash
-   docker compose up --build
-   ```
-   On first start, the `ollama` service automatically checks for the `llama3.2` model and pulls it into the `ollama_data` volume if missing. Subsequent starts skip the pull.
-2. Verify: `curl http://localhost:8000/health/ollama` should return `{"ollama":"ok",...,"model_loaded":true}` once the model is ready.
+First-Time Startup
+docker compose up --build
+On first run:
+•	The ollama container checks for llama3.2
+•	If not present, it downloads automatically
+•	Model is stored in ollama_data Docker volume
+Subsequent runs skip model download.
 
-Models are stored in the `ollama_data` volume, so you only need to pull once per environment; the automatic check in `docker-compose.yml` handles this for you.
+Verify Ollama
+curl http://localhost:8000/health/ollama
+Possible responses:
+Working:
+{"ollama":"ok","model_loaded":true}
+Not reachable:
+{"ollama":"unavailable","detail":"..."}
+Mock mode:
+{"ollama":"not_used","llm_provider":"mock"}
 
-To use **host Ollama** instead (e.g. you already run Ollama on the host): remove the `ollama` service from `docker-compose.yml`, set `OLLAMA_BASE_URL: http://host.docker.internal:11434` for the `api` service, add `extra_hosts: - "host.docker.internal:host-gateway"`, and ensure Ollama listens on `0.0.0.0` (snap installs often ignore `OLLAMA_HOST`; using Ollama in Docker avoids that).
+Switching LLM Providers
+Use Mock LLM (No AI)
+In docker-compose.yml:
+LLM_PROVIDER=mock
+Then rebuild:
+docker compose up --build
 
-To use the **Mock LLM** instead (no Ollama), set `LLM_PROVIDER: mock` for the `api` service and remove the `ollama` service (or leave it unused).
+Use OpenAI Instead
+Set environment variables in api service:
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your-key
+OPENAI_MODEL=gpt-4o-mini
+Then rebuild containers.
 
-### Verify Ollama is working
+Use Host Ollama Instead of Docker Ollama
+If running Ollama locally on host:
+1.	Remove ollama service from docker-compose.yml
+2.	Set for api service:
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+3.	Add:
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+4.	Ensure host Ollama listens on 0.0.0.0
+Using Docker Ollama is recommended to avoid networking issues.
 
-1. **Health check** (no auth):
-   ```bash
-   curl http://localhost:8000/health/ollama
-   ```
-   - `{"ollama":"ok","url":"..."}` — Ollama is reachable.
-   - `{"ollama":"unavailable","detail":"..."}` — Ollama not running or wrong URL (check `OLLAMA_BASE_URL`, and on Docker that the host is reachable).
-   - `{"ollama":"not_used","llm_provider":"mock"}` — App is using Mock LLM, not Ollama.
+Why AI Recommendations May Not Appear
+Similar Books (Book Page):
+•	Requires Ollama running
+•	If Ollama is down → returns empty suggestions
+"You Might Also Like":
+•	Requires at least one genre preference
+•	Uses hybrid or LLM ranking
+"In Your Library":
+•	Requires added books
+•	Requires genre preferences
+If empty:
+•	Add books
+•	Add genre preferences
+•	Check Ollama health
 
-2. **Ensure a model is pulled** on the host:
-   ```bash
-   ollama pull llama3.2
-   ollama list
-   ```
+Troubleshooting
+Check Running Containers
+docker ps
+Enter a Container
+API container:
+docker compose exec api bash
+Database container:
+docker compose exec db psql -U luminalib -d luminalib
+Clean Rebuild Everything
+docker compose down -v
+docker system prune -f
+docker compose up --build
 
-3. **Why no book recommendations?**
-   - **Similar books** (on a book page): Needs Ollama reachable; if it fails, the API returns empty suggestions (no error).
-   - **You might also like** (Recommendations page): Add at least one **genre preference** (e.g. Fiction, Sci-Fi) in the form on that page; then the AI suggestions use that. If Ollama is down, you get no suggestions.
-   - **In your library (by genre)** (Recommendations page): Shows books from your catalog that match your genre preferences; add books and genre preferences if the list is empty.
+Production Recommendations
+For production deployment:
+•	Use managed PostgreSQL (AWS RDS / Cloud SQL)
+•	Use S3 for file storage
+•	Run behind reverse proxy (Nginx / Traefik / IIS)
+•	Enable HTTPS
+•	Set strong SECRET_KEY
+•	Disable debug mode
+•	Scale API containers if needed
+

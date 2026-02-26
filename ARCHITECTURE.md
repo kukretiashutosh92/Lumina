@@ -1,228 +1,311 @@
-1. Overview & High-Level Architecture
+LuminaLib Architecture
 
-This system is designed with scalability and maintainability in mind. The main goal is to provide personalized book recommendations using a hybrid intelligence approach that combines:
+1. Database Schema – User Preferences & Core Data Model
+User preferences are the primary personalization driver in the recommendation engine.
+1.1 user_preferences Table
+The user_preferences table stores weighted genre interests per user:
+•	user_id (INT, FK → users.id)
+•	genre (STRING)
+•	weight (FLOAT, range typically 0–1 or 0–10 depending on normalization strategy)
+A higher weight indicates stronger affinity toward that genre.
+Why Weighted Preferences?
+Instead of binary preferences (liked/disliked), weighted preferences:
+•	Allow ranking differentiation across genres
+•	Enable soft personalization
+•	Support gradual preference evolution
+•	Allow blending with other signals (collaborative, content similarity)
 
-Content-based filtering
-
-Collaborative filtering
-
-TF-IDF–based similarity scoring
-
-The architecture focuses on clean separation of concerns, non-blocking API execution, modular recommendation logic, and structured frontend-backend communication.
-
-The overall system consists of:
-
-Backend API layer handling business logic
-
-Database layer storing users, books, preferences, and reviews
-
-Hybrid recommendation engine
-
-Frontend built with Next.js and Tailwind CSS
-
-2. Database Design
-
-The database stores structured data required for recommendations, including users, books, borrowing history, and user preferences.
-
-A key table is user_preferences, which captures reading interests.
-
-It includes:
-
-user_id (INT) → Unique identifier for the user
-
-genre (STRING) → Book genre such as fiction, sci-fi, history
-
-weight (FLOAT) → Preference strength (higher value = stronger interest)
-
+1.2 How Preferences Are Used in Scoring
 During recommendation generation:
+1.	Candidate books are selected.
+2.	Each book’s genre is matched against the user’s stored weights.
+3.	The corresponding weight becomes the raw preference score.
+4.	Scores are normalized to the range [0, 1].
+5.	Books already borrowed by the user are excluded.
+This keeps the schema minimal while allowing future expansion.
 
-Book genres are matched against user preference weights.
+1.3 Extending Preference Dimensions
+The schema is intentionally simple to allow growth.
+Future enhancements may include:
+•	author_preferences table
+•	decade_preferences table
+•	language_preferences
+•	Implicit preferences (calculated from borrow frequency)
+•	Time-decayed preference weights
+No redesign of the recommendation engine is required — only additional scoring modules.
 
-Books already borrowed by the user are excluded.
+1.4 Supporting Core Tables
+Other essential tables include:
+•	users
+•	books
+•	borrow_history
+•	reviews
+•	book_summaries
+•	review_analyses
+Each table is normalized and structured to avoid duplication and support hybrid scoring.
 
-Scores are normalized to maintain consistency.
+2. Async LLM Usage (Non-Blocking AI Processing)
+LuminaLib integrates LLM functionality for:
+•	Book summarization
+•	Review sentiment aggregation
+•	Optional recommendation ranking
+All LLM tasks run asynchronously to prevent blocking API responses.
 
-The schema is designed to be extensible, allowing additional preference dimensions like author or publication year in the future.
+2.1 Book Summarization Flow
+When a book is uploaded:
+1.	The API handler saves:
+o	Book metadata
+o	Uploaded file (via StorageBackend)
+2.	A background task is triggered.
+3.	The background task:
+o	Loads and decodes file content
+o	Sends content to the configured LLM
+o	Receives generated summary
+o	Stores summary in book_summaries
+o	Updates books.summary
+The API response is returned immediately after the background task starts.
+This ensures:
+•	Fast upload response
+•	No user wait time for LLM processing
+•	Better API throughput
 
-3. Recommendation Engine
+2.2 Review Sentiment Aggregation
+When a review is submitted:
+1.	Review is saved instantly.
+2.	A background task:
+o	Fetches all reviews for that book
+o	Sends combined text to the LLM
+o	Generates consensus sentiment
+o	Updates review_analyses
+This design ensures:
+•	Immediate response to user
+•	Eventually consistent sentiment analysis
+•	No blocking request cycle
 
-The recommendation engine is the core intelligence component of the system.
+2.3 Thread & Database Safety
+Each background task:
+•	Runs in a separate thread
+•	Creates a new async DB session
+•	Does not reuse request session
+•	Commits independently
+This avoids:
+•	Session conflicts
+•	Event loop blocking
+•	Shared state corruption
 
-It uses a hybrid weighted scoring model combining three signals:
+2.4 LLM Provider Abstraction
+LLM access is abstracted via an LLMBackend interface.
+Configured via:
+LLM_PROVIDER=mock | ollama
+•	mock → deterministic test responses
+•	ollama → local LLM runtime using Ollama
+•	Example model: Llama 3
+Why Abstraction?
+This ensures:
+•	No router changes when switching providers
+•	No business logic modification
+•	Clean separation of AI infrastructure
+Adding OpenAI requires:
+•	New class implementing required interface methods
+•	Factory update
+•	API key configuration
+Nothing else changes.
 
-40% Preference-based scoring
-
-40% Collaborative filtering
-
-20% Content similarity
-
-3.1 Preference-Based Scoring (40%)
-
-This score is calculated using genre weights stored in the user_preferences table.
-
-If a user has a high weight for a particular genre, books in that genre receive a higher score.
-
-Scores are normalized between 0 and 1.
-
-3.2 Collaborative Filtering (40%)
-
-Collaborative filtering follows the logic:
-
-“Users who borrowed what you borrowed also borrowed this.”
-
-The system:
-
-Identifies overlapping users based on borrowing history
-
-Counts shared borrow patterns
-
-Normalizes the result to generate a collaborative score
-
-This captures behavioral similarity between users.
-
-3.3 Content Similarity (20%)
-
-Content similarity is computed using:
-
-TF-IDF vectorization (scikit-learn TfidfVectorizer)
-
-Book title
-
-Author
-
-Genre
-
-Summary
-
-Process:
-
-Create a vector representation for each book.
-
-Build a user centroid vector based on previously borrowed books.
-
-Compute cosine similarity between the user centroid and candidate books.
-
-Normalize similarity scores.
-
-3.4 Candidate Selection & Final Scoring
-
-To optimize performance:
-
-Only the most recent 500 books are considered.
-
-Already borrowed books are excluded.
-
-The final score is computed as:
-
+3. Recommendation Model (ML-Style Hybrid Architecture)
+LuminaLib uses a hybrid recommendation engine combining three signals.
+Weights:
+•	0.4 Preference-Based
+•	0.4 Collaborative
+•	0.2 Content Similarity
+Final Score:
 Final Score =
 0.4 × Preference Score +
 0.4 × Collaborative Score +
 0.2 × Content Similarity Score
 
-The system returns the Top N books ranked by this final score.
+3.1 Candidate Selection Strategy
+To ensure performance scalability:
+•	Only the most recent 500 books are considered
+•	Already borrowed books are excluded
+•	Scoring occurs only on filtered candidates
+Why limit to 500?
+•	Prevents full dataset vectorization
+•	Predictable latency
+•	Scales linearly with bounded computation
+
+3.2 Preference-Based Signal (40%)
+Source: user_preferences
+Process:
+•	Match candidate book genre
+•	Retrieve weight
+•	Normalize to [0,1]
+Strength:
+•	Fast
+•	Personalized
+•	Deterministic
+Weakness:
+•	Does not capture behavior patterns
+
+3.3 Collaborative Signal (40%)
+Logic:
+“Users who borrowed what you borrowed also borrowed this.”
+Process:
+1.	Identify users overlapping with current user.
+2.	Count how many of those users borrowed each candidate book.
+3.	Use count as collaborative strength.
+4.	Normalize across candidates.
+Strength:
+•	Captures community behavior
+•	Independent of metadata
+Weakness:
+•	Suffers from cold start problem
+
+3.4 Content Similarity Signal (20%)
+Uses:
+•	scikit-learn
+•	TfidfVectorizer
+•	Cosine similarity
+Fields:
+•	Title
+•	Author
+•	Genre
+•	Summary
+Process:
+1.	Generate TF-IDF vectors for books.
+2.	Compute user centroid from borrowed books.
+3.	Measure cosine similarity.
+4.	Normalize results.
+Strength:
+•	Semantic matching
+•	Works even with sparse collaborative data
+No pre-training required — computed dynamically.
 
 4. Similar Books Endpoint
-
-The system provides an endpoint to retrieve similar books based on a selected book:
-
+Endpoint:
 GET /recommendations/similar/{book_id}
+Two execution modes:
 
-This endpoint uses TF-IDF vectorization and cosine similarity to compare:
+4.1 Hybrid Mode (Default)
+•	TF-IDF + cosine similarity
+•	Deterministic ranking
+•	No LLM required
 
-Title
+4.2 LLM Mode
+Configured via:
+RECOMMENDATION_ENGINE=llm
+In this mode:
+•	LLM receives:
+o	Selected book context
+o	Candidate book list
+•	Returns ranked book IDs
+No scikit-learn used in this mode.
 
-Author
+5. Extensibility (Single-Config Swap Architecture)
+LuminaLib is built around interface-based abstractions.
 
-Genre
+5.1 Storage Abstraction
+Uses StorageBackend.
+Configured via:
+STORAGE_BACKEND=local | s3
+•	local → filesystem
+•	s3 → AWS S3
+Adding new backend (e.g., MinIO):
+•	Implement new class
+•	Add branch in get_storage()
+•	No router modification
 
-Summary
-
-The most similar books are returned based on normalized similarity scores.
-
-5. Backend Design Principles
-
-The backend is designed with:
-
-Clear separation between API routes and business logic
-
-Modular recommendation engine logic
-
-Normalized scoring strategy
-
-Exclusion rules for already borrowed books
-
-Performance optimization through candidate limiting
-
-The recommendation logic is structured so additional signals can be added in the future without restructuring the entire system.
+5.2 LLM Abstraction
+Uses LLMBackend.
+Configured via:
+LLM_PROVIDER=mock | ollama
+Adding OpenAI:
+•	Create OpenAILLM class
+•	Implement required methods
+•	Update factory
+•	Add config
+No change to API endpoints.
 
 6. Frontend Architecture
+Built using:
+•	Next.js (App Router)
+•	Tailwind CSS
 
-The frontend is built using:
+6.1 Routing & Rendering
+•	App Router structure
+•	SSR used for SEO-relevant pages
+•	Client components for auth-protected routes
+•	useEffect used for redirect logic
 
-Next.js (App Router)
+6.2 State Management
+•	No global store (Redux/Zustand not used)
+•	Auth stored in React Context (AuthProvider)
+•	Page-level data stored via useState
+•	No centralized caching layer
+Intentional design for simplicity and predictability.
 
-Tailwind CSS
-
-Routing is handled via Next.js App Router with SSR support where required.
-
-State management is lightweight:
-
-Component-level state using useState
-
-Authentication state managed via React Context (AuthProvider)
-
-All API calls are centralized in:
-
+6.3 Network Layer
+All API calls routed through:
 src/lib/api.ts
+Components do not call fetch directly.
+Benefits:
+•	Centralized base URL
+•	Easier token injection
+•	Interceptor support
+•	Unified error handling
 
-Components do not call fetch directly. This ensures:
+6.4 Component Architecture
+Reusable components:
+•	BookCard
+•	Nav
+•	LoadingSpinner
+•	ErrorMessage
+Pages composed from modular components to avoid monolithic structure.
 
-Centralized request handling
+6.5 Styling Strategy
+•	Tailwind CSS only
+•	No CSS modules
+•	No styled-components
+•	Utility-first styling
+•	Responsive layout
+Mobile-first stacking layout with max-width container.
 
-Consistent error handling
+6.6 Error Handling Strategy
+•	API calls throw errors
+•	Callers use try/catch
+•	Error message stored in state
+•	Displayed via ErrorMessage
+•	error.tsx acts as error boundary
+Provides consistent UX and resilience.
 
-Cleaner UI components
+7. Architectural Characteristics
+LuminaLib demonstrates:
+•	Hybrid multi-signal recommendation intelligence
+•	Modular scoring framework
+•	Async AI processing
+•	Config-driven provider swapping
+•	Bounded computational complexity
+•	Clear frontend-backend separation
+•	Interface-based extensibility
+•	Performance-aware candidate limiting
 
-Reusable UI components include:
+8. Future Enhancements
+Potential improvements:
+•	Vector embeddings + vector database
+•	Redis caching layer
+•	Batch recommendation precomputation
+•	Popularity decay scoring
+•	Real-time recommendation updates
+•	Horizontal scaling
+•	Microservice extraction of recommendation engine
+•	Distributed background worker queue
 
-BookCard
+9. Conclusion
+LuminaLib integrates structured preference modeling, collaborative filtering, semantic similarity scoring, and optional LLM-based ranking into a unified hybrid recommendation system.
+The architecture is:
+•	Scalable
+•	Maintainable
+•	Extensible
+•	Configurable
+•	Production-ready
+Its modular design ensures that infrastructure components (LLM, storage, recommendation strategy) can be swapped via configuration without impacting core business logic.
 
-Nav
-
-ErrorMessage
-
-LoadingSpinner
-
-Styling is handled entirely with Tailwind CSS using responsive design principles.
-
-Error handling:
-
-API errors are thrown from the network layer
-
-Components catch and display inline messages
-
-error.tsx acts as fallback UI
-
-7. Architectural Strengths
-
-This system provides:
-
-Hybrid recommendation intelligence
-
-Multi-signal weighted scoring
-
-Clean modular backend logic
-
-Performance-optimized candidate selection
-
-TF-IDF–based semantic similarity
-
-Structured frontend-backend communication
-
-Maintainable and extensible design
-
-8. Conclusion
-
-The architecture combines structured database-driven logic with machine learning–based similarity scoring to provide personalized book recommendations.
-
-The hybrid model improves recommendation quality by blending preference matching, collaborative behavior, and content similarity. The modular backend and modern frontend ensure the system remains maintainable, scalable, and ready for future enhancements.

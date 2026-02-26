@@ -1,119 +1,237 @@
-# Testing Guide
+Testing Guide – LuminaLib
+This document describes the testing strategy, coverage areas, tools used, and execution steps for LuminaLib.
+The project includes:
+•	Backend unit and integration tests (FastAPI + pytest)
+•	Frontend component and utility tests (Next.js + Jest)
+•	ML and LLM validation tests
+•	Storage and authentication utility tests
 
-This document provides an overview of the test coverage for LuminaLib.
+Testing Approach
+LuminaLib follows these testing principles:
+•	Unit testing for business logic
+•	Integration testing for API endpoints
+•	Component testing for frontend UI
+•	Mock-based isolation for external services (LLM, storage)
+•	No dependency on external PostgreSQL during testing
+•	Deterministic and repeatable test behavior
+Backend tests use in-memory SQLite to avoid requiring PostgreSQL during testing.
 
-## Backend Tests
+Backend Tests
+Backend tests are located in:
+backend/tests/
 
-### Coverage
+Coverage Areas
+1. Authentication (tests/test_auth.py)
+Covers:
+•	User signup
+o	Successful registration
+o	Duplicate email handling
+•	User login
+o	Valid credentials
+o	Invalid password
+o	Non-existent user
+•	JWT token validation
+•	Get current authenticated user
+•	Unauthorized access protection
+•	Profile update
+•	Signout flow
+Validates:
+•	Password hashing
+•	JWT token generation and decoding
+•	Protected route access control
 
-✅ **Authentication** (`tests/test_auth.py`)
-- User signup (success, duplicate email)
-- User login (success, invalid credentials)
-- Get current user (authenticated, unauthorized)
-- Update profile
-- Signout
+2. Books (tests/test_books.py)
+Covers:
+Book CRUD:
+•	Create book (with file upload)
+•	Create book (without file upload)
+•	List books (with pagination)
+•	Get book details
+•	Update book
+•	Delete book
+Borrow / Return:
+•	Borrow book successfully
+•	Borrow already borrowed book
+•	Borrow non-existing book
+•	Return book successfully
+•	Return book not borrowed
+Reviews:
+•	Create review (valid case)
+•	Create review without borrowing
+•	Invalid rating validation
+•	Get book analysis endpoint
+Validates:
+•	Ownership checks
+•	Borrow state transitions
+•	Business rule enforcement
+•	Validation constraints
 
-✅ **Books** (`tests/test_books.py`)
-- Create book (with/without file upload)
-- List books (pagination)
-- Get book details (with/without user context)
-- Update book
-- Delete book
-- Borrow book (success, already borrowed, not found)
-- Return book (success, not borrowed)
-- Create review (success, without borrowing, invalid rating)
-- Get book analysis
+3. Recommendations (tests/test_recommendations.py)
+Covers:
+•	List user preferences
+•	Set preferences
+•	Update preferences
+•	Get personalized recommendations
+•	Get similar books
+•	Get AI suggestions (by genre)
+•	Get AI suggestions (similar to book)
+•	Ensure borrowed books are excluded
+Validates:
+•	Hybrid recommendation logic
+•	Filtering correctness
+•	Edge cases (empty preferences, empty catalog)
 
-✅ **Recommendations** (`tests/test_recommendations.py`)
-- List user preferences
-- Set/update preferences
-- Get personalized recommendations
-- Get similar books
-- Get AI suggestions (by genre, similar to book)
-- Recommendations exclude borrowed books
+4. Authentication Utilities (tests/test_auth_utils.py)
+Covers:
+•	Password hashing
+•	Password verification
+•	JWT creation
+•	JWT decoding
+•	Token expiration validation
+Ensures security logic works independently from API routes.
 
-✅ **Utilities**
-- Auth utilities (`tests/test_auth_utils.py`) - Password hashing, JWT tokens
-- Storage backend (`tests/test_storage.py`) - Local storage operations
-- LLM backend (`tests/test_llm.py`) - Mock LLM operations
-- Recommendation ML (`tests/test_recommendation_ml.py`) - ML algorithms
+5. Storage Backend (tests/test_storage.py)
+Covers:
+•	Local file save
+•	File retrieval
+•	File deletion
+•	Path validation
+Uses temporary test directories to avoid modifying real uploads.
 
-### Running Backend Tests
+6. LLM Backend (tests/test_llm.py)
+Covers:
+•	Mock summary generation
+•	Mock sentiment analysis
+•	Mock recommendation ranking
+Ensures:
+•	Deterministic output
+•	No external API dependency
+•	Stable AI-related logic
 
-```bash
+7. Recommendation ML (tests/test_recommendation_ml.py)
+Covers:
+•	TF-IDF similarity scoring
+•	Preference-based filtering
+•	Hybrid scoring combination
+•	Handling empty datasets
+Ensures:
+•	Correct ranking order
+•	No crashes in edge cases
+
+Running Backend Tests
+From the backend directory:
 cd backend
-pytest                    # Run all tests
-pytest --cov=app          # With coverage
-pytest -v                 # Verbose output
-pytest tests/test_auth.py # Specific test file
-```
+pytest
+Run with coverage:
+pytest --cov=app
+Verbose output:
+pytest -v
+Run a specific file:
+pytest tests/test_auth.py
+Run a specific test:
+pytest tests/test_auth.py::test_signup_success
 
-## Frontend Tests
+Backend Test Infrastructure
+Framework:
+•	pytest
+•	pytest-asyncio
+Database:
+•	SQLite in-memory database
+HTTP Client:
+•	httpx.AsyncClient
+Fixtures:
+•	Defined in conftest.py
+•	Shared database setup
+•	Authenticated user fixtures
+•	Test client fixture
+Advantages:
+•	No external database required
+•	Fast execution
+•	Fully isolated test runs
+•	Repeatable and stable
 
-### Coverage
+Frontend Tests
+Frontend tests are located inside:
+frontend/
+Uses:
+•	Jest
+•	React Testing Library
+•	jsdom environment
 
-✅ **Components**
-- `BookCard` - Book card rendering and links
-- `ErrorMessage` - Error display
-- `LoadingSpinner` - Loading state
-- `Nav` - Navigation component
-- `BookViewModal` - Book file viewer (PDF/text, pagination)
-- `Toaster` - Toast notifications wrapper
+Component Coverage
+Components tested:
+•	BookCard (rendering and navigation)
+•	ErrorMessage (error display)
+•	LoadingSpinner (loading state)
+•	Nav (navigation and auth display)
+•	BookViewModal (file rendering and pagination)
+•	Toaster (notification wrapper)
 
-✅ **Pages**
-- `LoginPage` - Login form and authentication flow
+Page Coverage
+LoginPage:
+•	Form rendering
+•	Input validation
+•	API call handling
+•	Successful login flow
+•	Error display handling
 
-✅ **Utilities**
-- `api.ts` - API client (requests, error handling, auth tokens)
-- `auth-context.tsx` - Authentication context (login, logout, user state)
+Utility Coverage
+api.ts:
+•	API request wrapper
+•	Error handling
+•	Token injection
+•	Response parsing
+auth-context.tsx:
+•	Login logic
+•	Logout logic
+•	Token storage
+•	User state management
 
-### Running Frontend Tests
-
-```bash
+Running Frontend Tests
+From the frontend directory:
 cd frontend
-npm test                  # Run all tests
-npm test -- --watch       # Watch mode
-npm test -- --coverage    # With coverage
-npm test LoginPage        # Specific test file
-```
+npm test
+Watch mode:
+npm test -- --watch
+Run with coverage:
+npm test -- --coverage
+Run specific test:
+npm test LoginPage
 
-## Test Infrastructure
+Frontend Test Infrastructure
+Framework:
+•	Jest
+Testing Library:
+•	React Testing Library
+Environment:
+•	jsdom
+Mocking:
+•	API calls
+•	Next.js router
+•	Context providers
+Advantages:
+•	No real backend required
+•	Component isolation
+•	Fast execution
 
-### Backend
-- **Framework**: pytest with pytest-asyncio
-- **Database**: In-memory SQLite (no external DB needed)
-- **HTTP Client**: httpx AsyncClient
-- **Fixtures**: Shared test fixtures in `conftest.py`
+Coverage Summary
+Area	Backend	Frontend
+Authentication	Complete	Complete
+Books CRUD	Complete	Partial
+Borrow/Return	Complete	Partial
+Reviews	Complete	Partial
+Recommendations	Complete	Partial
+File Upload	Complete	Partial
+Components	N/A	Complete
+Pages	N/A	Partial
+Utilities	Complete	Complete
+Legend:
+Complete – All critical paths covered
+Partial – Some paths covered, can be expanded
+Missing – No coverage
 
-### Frontend
-- **Framework**: Jest with React Testing Library
-- **Environment**: jsdom
-- **Mocking**: Jest mocks for API calls and Next.js router
-
-## Test Coverage Summary
-
-| Area | Backend | Frontend |
-|------|---------|----------|
-| Authentication | ✅ Complete | ✅ Complete |
-| Books CRUD | ✅ Complete | ⚠️ Partial |
-| Borrow/Return | ✅ Complete | ⚠️ Partial |
-| Reviews | ✅ Complete | ⚠️ Partial |
-| Recommendations | ✅ Complete | ⚠️ Partial |
-| File Upload | ✅ Complete | ⚠️ Partial |
-| Components | N/A | ✅ Complete |
-| Pages | N/A | ⚠️ Partial |
-| Utilities | ✅ Complete | ✅ Complete |
-
-**Legend:**
-- ✅ Complete - All critical paths tested
-- ⚠️ Partial - Some tests exist, more coverage possible
-- ❌ Missing - No tests
-
-## Adding New Tests
-
-### Backend Test Template
-
-```python
+Adding New Backend Tests
+Template:
 import pytest
 from httpx import AsyncClient
 
@@ -121,12 +239,16 @@ from httpx import AsyncClient
 async def test_feature_name(client: AsyncClient, auth_headers: dict):
     response = await client.get("/endpoint", headers=auth_headers)
     assert response.status_code == 200
-    # Add assertions
-```
+    assert response.json() is not None
+Best practices:
+•	Test success and failure scenarios
+•	Test edge cases
+•	Avoid real external dependencies
+•	Use fixtures
+•	Keep tests isolated
 
-### Frontend Test Template
-
-```typescript
+Adding New Frontend Tests
+Template:
 import { render, screen } from '@testing-library/react'
 import Component from './Component'
 
@@ -136,23 +258,23 @@ describe('Component', () => {
     expect(screen.getByText('Expected Text')).toBeInTheDocument()
   })
 })
-```
+Best practices:
+•	Test behavior instead of implementation details
+•	Mock API calls
+•	Simulate real user interactions
+•	Avoid testing internal state directly
 
-## Continuous Integration
-
-Tests should be run in CI/CD pipelines:
-
-```yaml
-# Example GitHub Actions
+Continuous Integration
+Tests should run automatically in CI/CD pipelines.
+Example GitHub Actions steps:
 - name: Run backend tests
   run: |
     cd backend
     pip install -r requirements.txt
-    pytest
+    pytest --cov=app
 
 - name: Run frontend tests
   run: |
     cd frontend
     npm install
-    npm test
-```
+    npm test -- --coverage
