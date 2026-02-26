@@ -187,7 +187,7 @@ Then run:
 npm start
 This serves the optimized application.
 Production build includes:
-•	Code splitting
+•	Code spliting
 •	Tree shaking
 •	Optimized bundles
 •	Minified assets

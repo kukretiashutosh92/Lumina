@@ -1,9 +1,9 @@
 LuminaLib Backend
 
 The LuminaLib Backend is a FastAPI-based REST API that powers the LuminaLib library management system. It provides authentication, book management, borrowing workflows, review handling, recommendation logic, file storage abstraction, and LLM-powered analysis features.
-This backend is built with scalability, modularity, and extensibility in mind. It supports pluggable storage systems and language model providers, making it flexible for development and production environments.
+This backend is built with scalability, modularity, and extensibility in mind. It supports pluggable storage systems and language model providers, making it flexible for development and production environment
 
-Technology Stack
+Technology Stack:
 The backend uses the following technologies:
 Core Framework
 •	FastAPI (v0.109.2)
