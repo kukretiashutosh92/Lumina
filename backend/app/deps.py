@@ -114,7 +114,7 @@ async def get_optional_user(
 ):
     """
     Returns user if logged in.
-    Otherwise returns None.
+    
     """
 
     if not credentials:

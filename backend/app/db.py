@@ -3,7 +3,7 @@
 """
 - Creates async database engine
 - Creates session factory
-- Provides dependency to access DB in routes
+- Provides dependency to access DB 
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
