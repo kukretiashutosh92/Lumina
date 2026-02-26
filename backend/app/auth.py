@@ -23,7 +23,7 @@ from app.config import settings
 
 
 # ---------------------------------------------------------------------
-# Password Hashing Configuration
+# Password Hash Configuration
 # ---------------------------------------------------------------------
 # bcrypt is a strong adaptive hashing algorithm.
 # CryptContext allows future algorithm upgrades without breaking hashes.

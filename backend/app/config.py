@@ -1,7 +1,7 @@
 """
 Application configuration.
 
-This version uses hardcoded defaults only.
+version uses hardcoded defaults only.
 No environment variables required.
 """
 
