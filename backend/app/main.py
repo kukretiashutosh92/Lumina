@@ -31,7 +31,7 @@ def health():
     return {"status": "ok"}
 
 
-# Check Ollama availability and model status
+# Check Ollama  and model status
 @app.get("/health/ollama")
 async def health_ollama():
     from app.config import settings
